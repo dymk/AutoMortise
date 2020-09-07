@@ -1,0 +1,13 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"addin",
+	"id":	"ba15fd46-569f-40f1-b1d9-4145cbbad58d",
+	"author":	"dymk",
+	"description":	{
+		"":	"Create various joints"
+	},
+	"version":	"1",
+	"runOnStartup":	false,
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
