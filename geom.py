@@ -21,7 +21,7 @@ def edgeDirection(edge: adsk.fusion.BRepEdge) -> adsk.core.Vector3D:
     return edge.geometry.asInfiniteLine().direction
 
 
-def arePlanesCoplanar(f1: adsk.fusion.BRepFace, f2: adsk.fusion.BRepFace) -> bool:
+def areFacesCoplanar(f1: adsk.fusion.BRepFace, f2: adsk.fusion.BRepFace) -> bool:
     return f1.geometry.isCoPlanarTo(f2.geometry)
 
 
@@ -41,23 +41,29 @@ def distBetweenFaces(f1: adsk.fusion.BRepFace, f2: adsk.fusion.BRepFace) -> floa
     if rl2 is None:
         raise Exception("f2 doesn't have an intersection?")
 
-    correctReversedNormal = -1 if f1.isParamReversed else 1
-
     # compute the distance vector between the two intersection points,
     # and correct the sign if they're going the opposite direction of the normal
-    return rl1.vectorTo(rl2).dotProduct(normal) * correctReversedNormal
+    return rl1.vectorTo(rl2).dotProduct(normal)
 
 
-def faceNormal(f1: adsk.fusion.BRepFace) -> adsk.core.Vector3D:
-    return f1.geometry.normal
+def faceNormal(face: adsk.fusion.BRepFace) -> adsk.core.Vector3D:
+    normal = face.geometry.normal.copy()
+    if face.isParamReversed:
+        normal.scaleBy(-1)
+    return normal
 
 
 def edgeDirectionForComparison(edge):
     direction = edgeDirection(edge)
-    if direction.x < 0:
-        direction.scaleBy(-1)
+    import math
+    rads = math.atan2(direction.x, direction.y)
+    if rads <= 0:
+        rads += math.pi
+    rads = rads % math.pi
+
     # round to a low enough precision for comparision
-    return (round(direction.x, 8), round(direction.y, 8))
+    # return (round(rads, 8), round(direction.x, 8), round(direction.y, 8))
+    return round(rads, 8)
 
 
 def lerp(p1: adsk.core.Point3D, p2: adsk.core.Point3D, amt: float) -> adsk.core.Point3D:
