@@ -149,36 +149,19 @@ class AutoMortiseCommand():
         sketch.name = sketchName
         sketch.isComputeDeferred = True
 
-        fromFacePoints = [
-            sketch.modelToSketchSpace(vertex.geometry)
-            for vertex in geom.adskList(fromFace.vertices, adsk.fusion.BRepVertex)
-        ]
+        toEvaluator = toFace.evaluator
+        for vertex in geom.adskList(fromFace.vertices, adsk.fusion.BRepVertex):
+            success, vertexParam = toEvaluator.getParameterAtPoint(
+                vertex.geometry
+            )
+            if not success or not toEvaluator.isParameterOnFace(vertexParam):
+                print("({}, {}) does not lie on the target surface".format(*[
+                    round(i, 2) for i in [vertex.geometry.x, vertex.geometry.y]
+                ]))
+                sketch.deleteMe()
+                return None
 
-        toFacePoints = [
-            sketch.modelToSketchSpace(vertex.geometry)
-            for vertex in geom.adskList(toFace.vertices, adsk.fusion.BRepVertex)
-        ]
-
-        minToX = min([p.x for p in toFacePoints])
-        maxToX = max([p.x for p in toFacePoints])
-        minToY = min([p.y for p in toFacePoints])
-        maxToY = max([p.y for p in toFacePoints])
-
-        allWithin = True
-        for p in fromFacePoints:
-            if (p.x < minToX) or (p.x > maxToX) or (p.y < minToY) or (p.y > maxToY):
-                print("({}, {}) does not lie within ({}, {}) -> ({}, {})".format(
-                    *[round(i, 2) for i in [p.x, p.y, minToX, minToY, maxToX, maxToY]]
-                ))
-                allWithin = False
-                break
-
-        if not allWithin:
-            print("{} is not within, bailing".format(prettyName))
-            sketch.deleteMe()
-            return None
-
-        # check that the face is some sort of square - and get the basis vector for its
+        # check that the face is some sort of rectangle - and get the basis vector for its
         # orientation
         fromEdges = geom.adskList(fromFace.edges, adsk.fusion.BRepEdge)
 
