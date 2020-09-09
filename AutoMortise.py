@@ -11,6 +11,7 @@ import itertools
 from . import ids
 from . import geom
 from .boundary import boundary
+import timeit
 
 EPS = 0.00001
 DEBUGGING_GRAPHICS = False
@@ -98,7 +99,6 @@ class AutoMortiseCommand():
 
     @boundary("onExecute")
     def onExecute(self, args: adsk.core.CommandEventArgs):
-
         pairsOfBodies = list(itertools.combinations(self._bodies, 2))
         print("{} combinations of bodies".format(len(pairsOfBodies)))
 
@@ -114,15 +114,27 @@ class AutoMortiseCommand():
 
         tlstart = self.design().timeline.markerPosition
 
+        startTimeFindCandidates = timeit.default_timer()
         tabsToExtrude = []
         for bodyPair in pairsOfBodies:
             for facePair in self.getCandidateFacePairs(*bodyPair):
                 tabToExtrude = self.tryPlacingTabProfiles(*facePair)
                 if tabToExtrude is not None:
                     tabsToExtrude.append(tabToExtrude)
+        endTimeFindCandidates = timeit.default_timer()
 
+        startTimeExtrude = timeit.default_timer()
         for tabToExtrude in tabsToExtrude:
             self.extrudeTabs(*tabToExtrude)
+        endTimeExtrude = timeit.default_timer()
+
+        def timeFmt(dur):
+            return "{} seconds".format(round(dur, 2))
+
+        print("duration to get candidate pairs: {}".format(
+            timeFmt(endTimeFindCandidates - startTimeFindCandidates)))
+        print("duration to extrude profiles:    {}".format(
+            timeFmt(endTimeExtrude - startTimeExtrude)))
 
         tlend = self.design().timeline.markerPosition-1
         if (tlend - tlstart) > 0:
@@ -199,6 +211,22 @@ class AutoMortiseCommand():
             sketch.deleteMe()
             return None
 
+        # find all the coplanar faces on the body being extruded into,
+        # and find the farthest one from fromFace
+        toBodyFaces = sorted([
+            face
+            for face
+            in geom.adskList(toFace.body.faces, adsk.fusion.BRepFace)
+            if not toFace == face and geom.arePlanesParallel(toFace, face)
+        ], key=lambda face: -geom.distBetweenFaces(fromFace, face))
+
+        if len(toBodyFaces) == 0:
+            print("body to extrude into has no good candidate ending plane")
+            sketch.deleteMe()
+            return None
+
+        toBodyTargetFace = toBodyFaces[0]
+
         # find the longer of the edges
         longEdges: List[adsk.fusion.SketchLine] = max(
             edgeGroups, key=lambda group: geom.sketchLineLength(group[0])
@@ -244,21 +272,7 @@ class AutoMortiseCommand():
         for profile in geom.adskList(sketch.profiles, adsk.fusion.Profile):
             tabProfiles.add(profile)
 
-        # find all the coplanar faces on the body being extruded into,
-        # and find the farthest one from fromFace
-        toBodyFaces = sorted([
-            face
-            for face
-            in geom.adskList(toFace.body.faces, adsk.fusion.BRepFace)
-            if not toFace == face and geom.arePlanesParallel(toFace, face)
-        ], key=lambda face: -geom.distBetweenFaces(fromFace, face))
-
-        if len(toBodyFaces) == 0:
-            print("body to extrude into has no good candidate ending plane")
-            sketch.deleteMe()
-            return None
-
-        tabDist = geom.distBetweenFaces(fromFace, toBodyFaces[0])
+        tabDist = geom.distBetweenFaces(fromFace, toBodyTargetFace)
 
         # The plane to extrude from, the tab profiles to extrude, the distance to extrude the tabs
         # and the two bodies that will be extrude from / into
