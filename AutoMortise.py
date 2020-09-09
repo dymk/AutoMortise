@@ -33,7 +33,7 @@ def createHandler(klass, method, name):
     return handler
 
 
-class MiterCommand():
+class AutoMortiseCommand():
     def __init__(self, createHandler):
         self._createHandler = createHandler
 
@@ -46,7 +46,7 @@ class MiterCommand():
         self._inputs: List[adsk.core.SelectionCommandInput] = []
 
         self._inputs.append(inputs.addSelectionInput(
-            ids.BODY1_SELECT, 'Bodies',
+            ids.BODIES_SELECT, 'Bodies',
             'Select bodies to generate tabs between'
         ))
 
@@ -75,7 +75,7 @@ class MiterCommand():
     @boundary("onChange")
     def onChange(self, args: adsk.core.InputChangedEventArgs):
         input_ = adsk.core.SelectionCommandInput.cast(args.input)
-        if input_.id == ids.BODY1_SELECT:
+        if input_.id == ids.BODIES_SELECT:
             entities = [
                 input_.selection(idx).entity
                 for idx in range(input_.selectionCount)
@@ -381,19 +381,19 @@ def run(context):
     tryRemove()
     app = adsk.core.Application.get()
     ui = app.userInterface
-    miterCommand = MiterCommand(createHandler)
-    handlers.append(miterCommand)
+    command = AutoMortiseCommand(createHandler)
+    handlers.append(command)
 
     button = ui.commandDefinitions.addButtonDefinition(
         ids.MAIN_BUTTON_ID,
-        'Miter',
-        'Miters everything',
+        'AutoMortise',
+        'Generate mortise&tenon / box joints',
         'res'
     )
 
     button.commandCreated.add(createHandler(
         adsk.core.CommandCreatedEventHandler,
-        miterCommand.onCreate,
+        command.onCreate,
         "onCreate"
     ))
 

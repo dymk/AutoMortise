@@ -1,5 +1,4 @@
-MAIN_BUTTON_ID = 'miter_script_main_button'
-BODY1_SELECT = 'miter_script_small_face_select'
-BODY2_SELECT = 'miter_script_large_face_select'
+MAIN_BUTTON_ID = 'auto_mortise_script_main_button'
+BODIES_SELECT = 'auto_mortise_script_small_face_select'
 TAB_TIMELINE_GROUP = 'tabs'
 TAB_SKETCH_PREFIX = 'tab - '

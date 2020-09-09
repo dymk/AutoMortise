@@ -4,10 +4,10 @@
 	"id":	"ba15fd46-569f-40f1-b1d9-4145cbbad58d",
 	"author":	"dymk",
 	"description":	{
-		"":	"Create various joints"
+		"":	"Automatically generate mortise & tenon / box joints between bodies"
 	},
 	"version":	"1",
-	"runOnStartup":	false,
+	"runOnStartup":	true,
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true
 }

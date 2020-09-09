@@ -1,5 +1,6 @@
 import traceback
 
+
 def boundary(name):
     def _withName(func):
         def _withTryExcept(*args):
