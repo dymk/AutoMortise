@@ -12,10 +12,14 @@ ORIGIN = adsk.core.Point3D.create(0, 0, 0)
 def distToOrigin(fromPoint: adsk.core.Point3D) -> float:
     return distToPoint(fromPoint, ORIGIN)
 
+def lineLength(line: adsk.core.Line3D) -> float:
+    return line.startPoint.distanceTo(line.endPoint)
 
 def sketchLineLength(line: adsk.fusion.SketchLine) -> float:
-    return line.geometry.startPoint.distanceTo(line.geometry.endPoint)
+    return lineLength(line.geometry)
 
+def edgeLength(edge: adsk.fusion.BRepEdge) -> float:
+    return edge.length
 
 def edgeDirection(edge: adsk.fusion.BRepEdge) -> adsk.core.Vector3D:
     return edge.geometry.asInfiniteLine().direction

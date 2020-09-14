@@ -44,16 +44,18 @@ class AutoMortiseCommand():
         inputs = command.commandInputs
 
         self._bodies: List[adsk.fusion.BRepBody] = []
-        self._inputs: List[adsk.core.SelectionCommandInput] = []
 
-        self._inputs.append(inputs.addSelectionInput(
+        selectBodiesInput = inputs.addSelectionInput(
             ids.BODIES_SELECT, 'Bodies',
             'Select bodies to generate tabs between'
-        ))
+        )
+        selectBodiesInput.addSelectionFilter('SolidBodies')
+        selectBodiesInput.setSelectionLimits(2, 0)
 
-        for _input in self._inputs:
-            _input.addSelectionFilter('SolidBodies')
-            _input.setSelectionLimits(2, 0)
+        self._tabMaxSizeInput = inputs.addValueInput(
+            ids.TAB_MAX_SIZE, 'Max Tab Width', 'cm',
+            adsk.core.ValueInput.createByReal(3)
+        )
 
         command.inputChanged.add(self._createHandler(
             adsk.core.InputChangedEventHandler,
@@ -86,7 +88,11 @@ class AutoMortiseCommand():
 
     @boundary("onValidate")
     def onValidate(self, args: adsk.core.ValidateInputsEventArgs):
-        return len(self._bodies) >= 2
+        if len(self._bodies) < 2:
+            return False
+        if not self._tabMaxSizeInput.isValidExpression:
+            return False
+        return True
 
     def app(self):
         return adsk.core.Application.get()
@@ -261,10 +267,24 @@ class AutoMortiseCommand():
                     p1, p2
                 )
 
-        # TODO: generate variable number of tabs of reasonable size, within some upper/lower bound
-        # For now just put two tabs in sensible looking places
-        drawRectFrom(0.2, 0.4)
-        drawRectFrom(0.6, 0.8)
+        # start with splitting into 3 sections - two detents on the
+        # outer edges, one tab in the middle, all of equal size
+        # keep adding more sections until we're under "max tab size"
+        longEdgeLength = geom.edgeLength(longEdges[0])
+        numSections = 3
+        maxTabSize = self._tabMaxSizeInput.value
+        while (longEdgeLength / numSections) > maxTabSize:
+            # add another pair of tabs / detents
+            numSections += 2
+
+        print("computed tab size to be {}".format(
+            round(longEdgeLength / numSections, 2)))
+
+        # the odd numbered sections are the tabs, evens are detents
+        for section in (i for i in range(numSections) if i % 2 == 1):
+            start = float(section) / numSections
+            end = float(section + 1) / numSections
+            drawRectFrom(start, end)
 
         sketch.isComputeDeferred = False
         print("{} sketch profiles generated".format(sketch.profiles.count))
