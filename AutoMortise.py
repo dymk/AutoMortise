@@ -157,23 +157,23 @@ class AutoMortiseCommand:
     # If it works, returns information about how to extrude the tab later
     def tryPlacingTabProfiles(
         self, fromFace: adsk.fusion.BRepFace, toFace: adsk.fusion.BRepFace
-    ) -> bool:
-        ac = fromFace.assemblyContext
-        if ac:
-            component = ac.component
-        else:
-            component = self.rootComponent()
-        component = adsk.fusion.Component.cast(component)
+    ):
+        fromComponent = self.getComponentOrRoot(fromFace)
+        toComponent = self.getComponentOrRoot(toFace)
 
-        prettyName = "{} -> {}".format(fromFace.body.name, toFace.body.name)
+        prettyName = "{}.{} -> {}.{}".format(
+            fromComponent.name, fromFace.body.name, toComponent.name, toFace.body.name
+        )
         print(
             "Checking if candidate pair of faces between {} is valid".format(prettyName)
         )
 
-        sketchName = ids.TAB_SKETCH_PREFIX + prettyName
-        sketch = component.sketches.addWithoutEdges(fromFace)
-        sketch.name = sketchName
-        sketch.isComputeDeferred = True
+        sketchName = ids.TAB_SKETCH_PREFIX + prettyName + " (from)"
+        fromSketch: adsk.fusion.Sketch = fromComponent.sketches.addWithoutEdges(
+            fromFace
+        )
+        fromSketch.name = sketchName
+        fromSketch.isComputeDeferred = True
 
         toEvaluator = toFace.evaluator
         for vertex in geom.adskList(fromFace.vertices, adsk.fusion.BRepVertex):
@@ -184,7 +184,7 @@ class AutoMortiseCommand:
                         *[round(i, 2) for i in [vertex.geometry.x, vertex.geometry.y]]
                     )
                 )
-                sketch.deleteMe()
+                fromSketch.deleteMe()
                 return None
 
         # check that the face is some sort of rectangle - and get the basis vector for its
@@ -194,22 +194,21 @@ class AutoMortiseCommand:
         for edge in fromEdges:
             if edge.geometry.curveType != adsk.core.Curve3DTypes.Line3DCurveType:
                 print("Face between {} contains a non-straight line".format(prettyName))
-                sketch.deleteMe()
+                fromSketch.deleteMe()
                 return None
 
-        sketch.isComputeDeferred = False
+        fromSketch.isComputeDeferred = False
         fromEdgesOnSketch = []
         for edge in fromEdges:
-            collection = sketch.project(edge)
+            collection = fromSketch.project(edge)
             for i in range(collection.count):
                 sketchCurve = collection.item(i)
                 sketchCurve.isConstruction = True
                 fromEdgesOnSketch.append(sketchCurve)
-        sketch.isComputeDeferred = True
+        fromSketch.isComputeDeferred = True
 
         edgeDirs = []
         edgeGroups = []
-        
         fromEdgesOnSketch.sort(key=geom.edgeDirectionForComparison)
         for edgeDir, edges in itertools.groupby(
             fromEdgesOnSketch, key=geom.edgeDirectionForComparison
@@ -223,7 +222,7 @@ class AutoMortiseCommand:
                     len(edgeDirs), edgeDirs
                 )
             )
-            sketch.deleteMe()
+            fromSketch.deleteMe()
             return None
 
         if (
@@ -235,7 +234,7 @@ class AutoMortiseCommand:
             >= EPS
         ):
             print("Face must be a rectangle (nonorthonal edge directions detected)")
-            sketch.deleteMe()
+            fromSketch.deleteMe()
             return None
 
         # find all the coplanar faces on the body being extruded into,
@@ -251,7 +250,7 @@ class AutoMortiseCommand:
 
         if len(toBodyFaces) == 0:
             print("body to extrude into has no good candidate ending plane")
-            sketch.deleteMe()
+            fromSketch.deleteMe()
             return None
 
         toBodyTargetFace = toBodyFaces[0]
@@ -282,7 +281,7 @@ class AutoMortiseCommand:
 
             for idx, p1 in enumerate(rectPoints):
                 p2 = rectPoints[(idx + 1) % len(rectPoints)]
-                sketch.sketchCurves.sketchLines.addByTwoPoints(p1, p2)
+                fromSketch.sketchCurves.sketchLines.addByTwoPoints(p1, p2)
 
         # start with splitting into 3 sections - two detents on the
         # outer edges, one tab in the middle, all of equal size
@@ -304,32 +303,35 @@ class AutoMortiseCommand:
             end = float(section + 1) / numSections
             drawRectFrom(start, end)
 
-        sketch.isComputeDeferred = False
-        print("{} sketch profiles generated".format(sketch.profiles.count))
-        tabProfiles = adsk.core.ObjectCollection.create()
-        for profile in geom.adskList(sketch.profiles, adsk.fusion.Profile):
-            tabProfiles.add(profile)
+        fromSketch.isComputeDeferred = False
+        print("{} sketch profiles generated".format(fromSketch.profiles.count))
+        fromTabProfiles = adsk.core.ObjectCollection.create()
+
+        for profile in geom.adskList(fromSketch.profiles, adsk.fusion.Profile):
+            fromTabProfiles.add(profile)
 
         tabDist = geom.distBetweenFaces(fromFace, toBodyTargetFace)
 
         # The plane to extrude from, the tab profiles to extrude, the distance to extrude the tabs
-        # and the two bodies that will be extrude from / into
-        return (fromFace.geometry, tabProfiles, tabDist, fromFace.body, toFace.body)
+        # and the two faces that will be extrude from / into
+        return (fromFace, toFace, fromTabProfiles, tabDist)
 
     def extrudeTabs(
         self,
-        plane: adsk.core.Plane,
-        profilesCollection: adsk.core.ObjectCollection,
+        fromFace: adsk.fusion.BRepFace,
+        toFace: adsk.fusion.BRepFace,
+        fromtabProfiles: adsk.core.ObjectCollection,
         tabDist: float,
-        fromBody: adsk.fusion.BRepBody,
-        toBody: adsk.fusion.BRepBody,
     ):
-        fromComponent = self.getComponentOrRoot(fromBody)
+        fromBody = fromFace.body
+        toBody = toFace.body
+
+        fromComponent = self.getComponentOrRoot(fromFace)
         toComponent = self.getComponentOrRoot(toBody)
 
         # perform the tab extrude (only on the body that contains the fromFace)
         tabFeatureInput = fromComponent.features.extrudeFeatures.createInput(
-            profilesCollection, adsk.fusion.FeatureOperations.JoinFeatureOperation
+            fromtabProfiles, adsk.fusion.FeatureOperations.JoinFeatureOperation
         )
         tabFeatureInput.participantBodies = [fromBody]
         tabFeatureInput.setDistanceExtent(
@@ -337,15 +339,14 @@ class AutoMortiseCommand:
         )
         fromComponent.features.extrudeFeatures.add(tabFeatureInput)
 
-        # and cut tabs into the other body
-        cutFeatureInput = toComponent.features.extrudeFeatures.createInput(
-            profilesCollection, adsk.fusion.FeatureOperations.CutFeatureOperation
-        )
-        cutFeatureInput.participantBodies = [toBody]
-        cutFeatureInput.setDistanceExtent(
-            False, adsk.core.ValueInput.createByReal(tabDist)
-        )
-        toComponent.features.extrudeFeatures.add(cutFeatureInput)
+        # Cut out the tabs via body combine
+        combineFeatures = toComponent.features.combineFeatures
+        fromBodies = adsk.core.ObjectCollection.create()
+        fromBodies.add(fromBody)
+        cutInput = combineFeatures.createInput(toBody, fromBodies)
+        cutInput.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
+        cutInput.isKeepToolBodies = True
+        combineFeatures.add(cutInput)
 
     def getComponentOrRoot(self, objWithAssemblyContext) -> adsk.fusion.Component:
         ac = objWithAssemblyContext.assemblyContext
